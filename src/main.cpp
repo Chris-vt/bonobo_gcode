@@ -44,10 +44,10 @@ long line_number=0;
 float fr=0; // feedrate
 
 //movement steps based on machine params
-long STEPS_PER_MM_X   =    (STEPS_PER_TURN_X*PITCH_X*MICRO_STEPPING_X);
-long STEPS_PER_MM_Y   =    (STEPS_PER_TURN_Y*PITCH_Y*MICRO_STEPPING_Y);
-long STEPS_PER_MM_Z   =    (STEPS_PER_TURN_Z*PITCH_Z*MICRO_STEPPING_Z);  
-long STEPS_PER_MM_E   =    (STEPS_PER_TURN_E*PITCH_E*MICRO_STEPPING_E);  
+long STEPS_PER_MM_X   =    round((float)STEPS_PER_TURN_X/PITCH_X*MICRO_STEPPING_X);
+long STEPS_PER_MM_Y   =    round((float)STEPS_PER_TURN_Y/PITCH_Y*MICRO_STEPPING_Y);
+long STEPS_PER_MM_Z   =    round((float)STEPS_PER_TURN_Z/PITCH_Z*MICRO_STEPPING_Z);  
+long STEPS_PER_MM_E   =    round((float)STEPS_PER_TURN_E/PITCH_E*MICRO_STEPPING_E);  
 
 
 //------------------------------------------------------------------------------
@@ -93,32 +93,32 @@ void setup() {
 }
 
 /**
- * set up the pins for each stepper motor. Defauls pins fit CNCshieldV3
+ * set up the pins for each stepper motor
  */
 void motor_setup() {
-  motors[0].step_pin=2;
-  motors[0].dir_pin=5;
-  motors[0].enable_pin=8;
-  motors[0].limit_switch_pin=9;
-
-  motors[1].step_pin=3;
-  motors[1].dir_pin=6;
-  motors[1].enable_pin=8;
-  motors[1].limit_switch_pin=10;
-
-  motors[2].step_pin=4;
-  motors[2].dir_pin=7;
-  motors[2].enable_pin=8;
-  motors[2].limit_switch_pin=11;
-
-  motors[3].step_pin=12;
-  motors[3].dir_pin=13;
-  motors[3].enable_pin=8;
-  motors[3].limit_switch_pin=11;
+  //X stepper
+  motors[0].step_pin=X_STEP;
+  motors[0].dir_pin=X_DIR;
+  motors[0].enable_pin=ENABLE;
+  motors[0].limit_switch_pin=X_LIMIT;
+  //Y stepper
+  motors[1].step_pin=Y_STEP;
+  motors[1].dir_pin=Y_DIR;
+  motors[1].enable_pin=ENABLE;
+  motors[1].limit_switch_pin=Y_LIMIT;
+  //Z stepper
+  motors[2].step_pin=Z_STEP;
+  motors[2].dir_pin=Z_DIR;
+  motors[2].enable_pin=ENABLE;
+  motors[2].limit_switch_pin=Z_LIMIT;
+  //E stepper
+  motors[3].step_pin=E_STEP;
+  motors[3].dir_pin=E_DIR;
+  motors[3].enable_pin=ENABLE;
+  motors[3].limit_switch_pin=E_LIMIT;
   
   int i;
   for(i=0;i<NUM_AXIES;++i) {  
-    // set the motor pin & scale
     pinMode(motors[i].step_pin,OUTPUT);
     pinMode(motors[i].dir_pin,OUTPUT);
     pinMode(motors[i].enable_pin,OUTPUT);
@@ -150,11 +150,8 @@ void motor_enable(bool cmd) {
 
 /**
  * Set the logical position
- * @input npx new position x
- * @input npy new position y
  */
 void position(float npx,float npy,float npz,float npe) {
-  // here is a good place to add sanity tests
   px=npx;
   py=npy;
   pz=npz;
@@ -204,6 +201,11 @@ void loop() {
   // listen for serial commands
   while(Serial.available() > 0) {  
     char c=Serial.read();  // read from serial
+    
+    #ifdef VERBOSE
+    Serial.print(c); //echo
+    #endif
+    
     if(sofar<MAX_BUF-1) buffer[sofar++]=c;  // store it
     if(c=='\n') { // if cmd received
       buffer[sofar]=0;  // end the buffer so string functions work right
@@ -279,6 +281,8 @@ float parseNumber(char code,float val) {
 
 void Do_Move(float newx,float newy,float newz,float newe, float F) {
 
+
+
   a[0].nsteps = abs(newx-px)*STEPS_PER_MM_X;
   a[1].nsteps = abs(newy-py)*STEPS_PER_MM_Y;
 
@@ -303,7 +307,7 @@ void Do_Move(float newx,float newy,float newz,float newe, float F) {
     digitalWrite(motors[2].dir_pin,newx-px>0?HIGH:LOW);
     digitalWrite(motors[3].dir_pin,newy-py>0?HIGH:LOW);
   }
-  
+
 
   float XYtimeMove;
   XYtimeMove = Time_Move (abs(newx-px),abs(newy-py),F);
@@ -311,6 +315,16 @@ void Do_Move(float newx,float newy,float newz,float newe, float F) {
   ZEtimeMove = Time_Move (abs(newz-pz),abs(newe-pe),F); 
   float OpTimeMove;
   OpTimeMove = max(XYtimeMove,ZEtimeMove);
+
+  #ifdef VERBOSE
+  Serial.println("move called");
+  Serial.print(F("Number steps: "));
+  Serial.println(a[0].nsteps);
+  Serial.print(F("Operating time seconds: "));
+  Serial.println(OpTimeMove);
+  Serial.println(F("Steps per second: "));
+  Serial.println(a[0].nsteps/OpTimeMove);
+  #endif
 
   a[0].stepDelay = Step_Delay (a[0].nsteps, OpTimeMove);
   a[1].stepDelay = Step_Delay (a[1].nsteps, OpTimeMove);
@@ -328,9 +342,10 @@ void Do_Move(float newx,float newy,float newz,float newe, float F) {
   a[3].nextMove = 0;
 
   
-  long i,j,stepCount=0;
+  long i,j,stepCount,iteration=0;
   long timeMove=0;
   long minTimeMove= 0;
+  unsigned long Start_time, End_time, Elapsed_time;
 
 
   for (j=0;j<NUM_AXIES;++j) {
@@ -338,11 +353,15 @@ void Do_Move(float newx,float newy,float newz,float newe, float F) {
       minTimeMove = a[j].stepDelay;
     }
   }
- 
+
+    Serial.println("mintime move: ");
+    Serial.println(minTimeMove);
+
+  Start_time = millis();
   while (timeMove <= OpTimeMove*1000000) {
     for(j=0;j<NUM_AXIES;++j) {
       if (a[j].stepDelay !=0) {
-        if(timeMove>=a[j].nextMove) {
+        if(timeMove>a[j].nextMove) {
           digitalWrite(motors[j].step_pin,HIGH);
           digitalWrite(motors[j].step_pin,LOW);
           a[j].nextMove = a[j].nextMove + a[j].stepDelay;
@@ -352,15 +371,21 @@ void Do_Move(float newx,float newy,float newz,float newe, float F) {
         }
       }
     }
-    //Serial.print("Step: ");
-    //Serial.print(stepCount);
-    //Serial.print(": Time: ");
-    //Serial.println(timeMove);
-
     timeMove = timeMove + minTimeMove;
-    delayMicroseconds(minTimeMove);
 
+    delayMicroseconds(minTimeMove);
+    iteration = iteration +1;
+    
   }
+  End_time = millis();
+  Elapsed_time = End_time - Start_time;
+
+    Serial.println("Iterations: ");
+    Serial.println(iteration);
+    Serial.println("Delay unit: ");
+    Serial.println(minTimeMove);
+    Serial.println(": Elapsed time: ");
+    Serial.println(Elapsed_time);
 
   position(newx,newy,newz,newe);
 }
@@ -380,12 +405,15 @@ float Time_Move (float D1, float D2, float UserFeed) {
  * Calculates delay in microseconds to implement coordinated 2-axis move
  */
 long Step_Delay (float steps, float timeMove) {
+
+
   long motorDelay;
   if (steps==0) {
     motorDelay = 0;
   } else {
     motorDelay = (timeMove/steps)*1000000;
   }
+
  
   return motorDelay; 
 }
