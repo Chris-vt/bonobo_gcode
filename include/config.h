@@ -9,14 +9,14 @@
 
 // Steppers and hardware set up 
 #define STEPS_PER_TURN_X     (2038)
-#define STEPS_PER_TURN_Y     (2038)
+#define STEPS_PER_TURN_Y     (20)
 #define STEPS_PER_TURN_Z     (2038)
-#define STEPS_PER_TURN_E     (2038)  
+#define STEPS_PER_TURN_E     (20)  
 
 #define PITCH_X     (40)                         // Pitch in mm per turn Gt3 40mm per turn
-#define PITCH_Y     (1)
-#define PITCH_Z     (1)
-#define PITCH_E     (1)  
+#define PITCH_Y     (0.5)
+#define PITCH_Z     (40)
+#define PITCH_E     (0.5)  
 
 #define MICRO_STEPPING_X     (1)               // e.g. 4 for 1/4-step
 #define MICRO_STEPPING_Y     (1)
@@ -45,4 +45,4 @@
 
 #define E_STEP                  (12)            //mapping spindle enable
 #define E_DIR                   (13)            //mapping spindle direction
-#define E_LIMIT                 (11)            //fix this, Z and E have same limit switch
+#define E_LIMIT                 (17)            //fix this, Z and E have same limit switch
